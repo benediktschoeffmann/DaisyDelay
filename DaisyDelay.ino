@@ -2,6 +2,9 @@
 #define KNOB_B A1
 #define KNOB_C A2
 #define KNOB_D A3
+#define KNOB_E A4
+#define KNOB_F A5
+
 
 #define SWITCH_MONO   D1
 
@@ -14,12 +17,14 @@ int knobA, knobB, knobC, knobD;
 bool isMono = true;
 
 // two DelayLine of 24000 floats.
-DelayLine<float, 22000> del_left, del_right;
+DelayLine<float, 24000> del_left, del_right;
 AnalogControl ctrl_fb_l, ctrl_fb_r;
 AnalogControl ctrl_mix_l, ctrl_mix_r;
+AnalogControl crtl_del_l, ctrl_del_r;
 
 float ffbl, ffbr;
 float fmixl, fmixr;
+float fdell, fder;
 
 
 void MyCallback(float **in, float **out, size_t size) {
@@ -39,12 +44,12 @@ void MyCallback(float **in, float **out, size_t size) {
     wet_right = del_right.Read();
 
     // Write to Delay with some feedback
-    del_left.Write((wet_left * 0.5) + dry_left);
-    del_right.Write((wet_right * 0.5) + dry_right);
+    del_left.Write((wet_left * ffbl) + dry_left);
+    del_right.Write((wet_right * ffbr) + dry_right);
 
     // Mix Dry and Wet and send to I/O
-    out[0][i] = wet_left * 0.707 + dry_left * 0.707;
-    out[1][i] = wet_right * 0.707 + dry_right * 0.707;
+    out[0][i] = wet_left * fmixl + (dry_left * (1-fmixl));
+    out[1][i] = wet_right * fmixr + (dry_right * (1 - fmixl));
   }
 }
 
@@ -58,7 +63,6 @@ void setup() {
   sampleRate = DAISY.AudioSampleRate();
 
   // Init Pins for Switch
-  // gpio_is_mono.Init(SWITCH_MONO, GPIO::Mode::INPUT, GPIO::Pull::PULLUP);
   pinMode(SWITCH_MONO, INPUT_PULLUP);
 
   // Init Delay Lines
@@ -67,13 +71,21 @@ void setup() {
 
   // Init Analog Ctrl
   ctrl_fb_l.Init(KNOB_A, sampleRate);
-  ctrl_fb_r.Init(KNOB_B, sampleRate);
-  ctrl_mix_l.Init(KNOB_C, sampleRate);
-  ctrl_mix_r.Init(KNOB_D, sampleRate);
+  ctrl_mix_l.Init(KNOB_B, sampleRate);
+  ctrl_del_l.Init(KNOB_C, sampleRate);
+  ctrl_fb_r.Init(KNOB_D, sampleRate);
+  ctrl_mix_r.Init(KNOB_E, sampleRate);
+  ctrl_del_r.Init(KNOB_F, sampleRate);
+  
+  // Set Delay Time
+  del_left.SetDelay(8000.f * 0.5f);
+  del_right.SetDelay(8000.f * 0.5f);
 
-  // Set Delay Times in Samples
-  del_left.SetDelay(2000.0f);
-  del_right.SetDelay(2000.0f);
+  // init values;
+  ffbl = ffbr = 0.1f;
+  fmixl = fmixr = 0.5f;
+  fdell = fdelr = 0.5f;
+  isMono = false;
 
   // Start Audio
   DAISY.begin(MyCallback);
@@ -84,8 +96,13 @@ void loop() {
 
   ffbl = ctrl_fb_l.Process();
   ffbr = ctrl_fb_r.Process();
+  fdell = ctrl_del_l.Process();
+  fdelr = ctrl_del_r.Process();
   fmixl = ctrl_mix_l.Process();
   fmixr = ctrl_mix_r.Process();
+
+  del_left.SetDelay(constrain(fdell, 0.f, 1.f) * 24000);
+  del_right.SetDelay(constrain(fdelr, 0.f, 1.f) * 24000);
 }
 
 
